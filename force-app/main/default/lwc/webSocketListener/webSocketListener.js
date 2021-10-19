@@ -26,7 +26,6 @@ export default class WebSocketListener extends LightningElement {
     _socketIoInitialized = false;
     _socket;
     _recordId;
-    _message;
     _submittedBy;
     _description;
     _externalId;
@@ -68,46 +67,45 @@ export default class WebSocketListener extends LightningElement {
     handleMessage(data){
         if(data){
             const result = JSON.parse(data);
-            this._recordId = setValueIfEmpty(result.payload.SalesforceId__c,''); //sample data: '0015w0000299PWfAAM'
-            this._externalId = setValueIfEmpty(result.payload.ExternalId__c,''); //sample data: 'ABC12345'
-            this._objectName = setValueIfEmpty(result.payload.ObjectAPIName__c,''); //sample data: 'Account','Case','MyObject__c'
-            this._fieldNames = setValueIfEmpty(result.payload.FieldAPINames__c,''); //sample data: 'BillingState,BillingCity,CustomerId__c'
-            this._heading = setValueIfEmpty(result.payload.Heading__c,''); //sample data: 'New Opportunity'
-            this._description = setValueIfEmpty(result.payload.Description__c,''); //sample data: 'Opportunity created in NW Region for Account ACME'
-            this._payload1 = setValueIfEmpty(result.payload.PrimaryPayload__c,'');  //sample data: '{"widget": {"id":"67890","items":[{"foo":"bar"},{"foo":"bar"}]}}', use JSON.parse(this._payload1) to convert json string to object
-            this._payload2 = setValueIfEmpty(result.payload.SecondaryPayload__c,''); //sample data: same as primary payload, use JSON.parse(this._payload2) to convert json string to object
-            this._payload3 = setValueIfEmpty(result.payload.TertiaryPayload__c,''); //sample data: same as primary payload, use JSON.parse(this._payload3) to convert json string to object
-            this._submittedBy = setValueIfEmpty(result.payload.SubmittedBy__c,''); //sample data: '0055w00000BxS2V'
-            
+            const payload = result.hasOwnProperty('payload') ? result.payload : {};
+            this._recordId = setValueIfEmpty(payload.SalesforceId__c,''); //sample data: '0015w0000299PWfAAM'
+            this._externalId = setValueIfEmpty(payload.ExternalId__c,''); //sample data: 'ABC12345'
+            this._objectName = setValueIfEmpty(payload.ObjectAPIName__c,''); //sample data: 'Account','Case','MyObject__c'
+            this._fieldNames = setValueIfEmpty(payload.FieldAPINames__c,''); //sample data: 'BillingState,BillingCity,CustomerId__c'
+            this._heading = setValueIfEmpty(payload.Heading__c,''); //sample data: 'New Opportunity'
+            this._description = setValueIfEmpty(payload.Description__c,''); //sample data: 'Opportunity created in NW Region for Account ACME'
+            this._payload1 = setValueIfEmpty(payload.PrimaryPayload__c,'');  //sample data: '{"widget": {"id":"67890","items":[{"foo":"bar"},{"foo":"bar"}]}}', use JSON.parse(this._payload1) to convert json string to object
+            this._payload2 = setValueIfEmpty(payload.SecondaryPayload__c,''); //sample data: same as primary payload, use JSON.parse(this._payload2) to convert json string to object
+            this._payload3 = setValueIfEmpty(payload.TertiaryPayload__c,''); //sample data: same as primary payload, use JSON.parse(this._payload3) to convert json string to object
+            this._submittedBy = setValueIfEmpty(payload.SubmittedBy__c,''); //sample data: '0055w00000BxS2V'
+
+            //EX: HANDLE MESSAGE WITH CUSTOM HANDLER PER OBJECT
+            switch (this._objectName.toLowerCase()) {
+                case 'case':
+                    this.handleCase();
+                    break;
+                //no default
+            }
+
+            //EX: HANDLE MESSAGE WITH CACHE REFRESH - signal that the data for the provided recordIDs has changed, so that the Lightning Data Service cache and wires are refreshed.
+            if(this._recordId !== ''){
+                getRecordNotifyChange([{recordId: this._recordId}]);
+            }
+
             //EX: HANDLE MESSAGE WITH BUBBLE EVENT - notifies parent of message data
             const messageEvent = new CustomEvent('messageReceived',{
                 detail: {'message':data}
             });
             this.dispatchEvent(messageEvent);
-
-        }else{
-            return;
-        }
-
-        //EX: HANDLE MESSAGE WITH CACHE REFRESH - signal that the data for the provided recordIDs has changed, so that the Lightning Data Service cache and wires are refreshed.
-        if(this._recordId !== ''){
-            getRecordNotifyChange([{recordId: this._recordId}]);
-        }
-
-        //EX: HANDLE MESSAGE WITH CUSTOM HANDLER PER OBJECT
-        switch (this._objectName) {
-            case 'Case':
-                this.handleCase();
-                break;
-            //no default
         }
     }
 
     handleCase(){
-        //create toast message to notify user of case update
+        //create toast message to notify user of change
+        const isCurrentUser = USER_ID === this._submittedBy;
         const variant = isCurrentUser ? 'success' : 'info';
         this.dispatchEvent(
-            showToast('info','dismissible','Case Message Received for: ' + this._recordId, this._payload1 + ' Submitter: ' + this._submittedBy)
+            showToast(variant,'dismissible',this._description + 'Message Received for: ' + this._recordId, this._payload1 + '. Matches current user: ' + isCurrentUser)
         );
     }
 }
